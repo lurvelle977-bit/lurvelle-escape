@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import DestinationsExplorer from "@/components/destinations/DestinationsExplorer";
-import Footer from "@/components/footer/Footer";
-import Navbar from "@/components/navbar/Navbar";
+import Footer from "@/components/layout/Footer";
+import Navbar from "@/components/layout/Navbar";
+import DestinationsExplorer from "@/features/destinations/DestinationsExplorer";
 
 export const metadata: Metadata = {
-  title: "Destinations — Lurvelle Escapes",
+  title: "Destinations",
+  description: "Private day tours from Lisbon to Sintra, Arrábida, Óbidos, Évora, Porto and beyond — filter by region and budget.",
 };
 
 // Destinations page: interactive map of tours around Portugal

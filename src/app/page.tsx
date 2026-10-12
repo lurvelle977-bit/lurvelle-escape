@@ -1,12 +1,12 @@
-import About from "@/components/about/About";
-import ComfortTiers from "@/components/comfort/ComfortTiers";
-import Contact from "@/components/contact/Contact";
-import Experiences from "@/components/experiences/Experiences";
-import Fleet from "@/components/fleet/Fleet";
-import Footer from "@/components/footer/Footer";
-import Hero from "@/components/hero/Hero";
-import Navbar from "@/components/navbar/Navbar";
-import TrustBar from "@/components/trust-bar/TrustBar";
+import Footer from "@/components/layout/Footer";
+import Navbar from "@/components/layout/Navbar";
+import ContactSection from "@/features/contact/ContactSection";
+import About from "@/sections/home/About";
+import ComfortTiers from "@/sections/home/ComfortTiers";
+import Experiences from "@/sections/home/Experiences";
+import Fleet from "@/sections/home/Fleet";
+import Hero from "@/sections/home/Hero";
+import TrustBar from "@/sections/home/TrustBar";
 
 // Home page: sections in the order of the design
 export default function HomePage() {
@@ -20,7 +20,7 @@ export default function HomePage() {
         <ComfortTiers />
         <Fleet />
         <About />
-        <Contact />
+        <ContactSection />
       </main>
       <Footer />
     </>

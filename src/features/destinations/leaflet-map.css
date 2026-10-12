@@ -1,0 +1,27 @@
+/* Dark, gold-tinted map tiles and controls */
+.destinations-map { border-radius: 2px; overflow: hidden; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 25%, transparent); background: var(--color-ink); }
+.destinations-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(0.85) brightness(0.62) contrast(1.15) sepia(0.25); }
+.destinations-map .leaflet-control-zoom a { background: rgb(26 24 18 / 0.9); color: var(--color-gold); border: 1px solid color-mix(in srgb, var(--color-gold) 35%, transparent); }
+.destinations-map .leaflet-control-zoom a:hover { background: var(--color-charcoal); color: var(--color-gold-light); }
+.destinations-map .leaflet-bar { border: none; box-shadow: 0 8px 24px rgb(0 0 0 / 0.5); }
+.destinations-map .leaflet-control-attribution { background: rgb(15 14 11 / 0.7); color: var(--color-faint); font-size: 9px; }
+.destinations-map .leaflet-control-attribution a { color: var(--color-muted); }
+
+/* Destination pins */
+.map-pin { display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap; animation: pinPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both; transition: opacity 0.3s; }
+.map-pin.dim { opacity: 0.25; pointer-events: none; }
+.map-pin .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-charcoal); border: 1.4px solid var(--color-gold); box-sizing: border-box; flex-shrink: 0; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), background 0.3s, box-shadow 0.3s; }
+.map-pin .lbl { font-family: var(--font-inter), sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: 1.6px; color: var(--color-muted); text-shadow: 0 0 4px var(--color-ink), 0 0 2px var(--color-ink), 0 1px 2px var(--color-ink); transition: color 0.3s; }
+.map-pin.on .dot { background: var(--color-gold); transform: scale(1.4); box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-gold) 25%, transparent); }
+.map-pin.on .lbl { color: var(--color-gold); }
+.map-pin.left { flex-direction: row-reverse; }
+
+/* Keyboard focus ring on the Leaflet marker wrapping each pin */
+.leaflet-marker-icon:focus-visible { outline: none; }
+.leaflet-marker-icon:focus-visible .map-pin .dot { box-shadow: 0 0 0 3px var(--color-ink), 0 0 0 5px var(--color-gold); }
+
+/* "You are here" marker with pulsing ring */
+.map-home { position: relative; width: 8px; height: 8px; }
+.map-home .core { position: absolute; inset: 0; border-radius: 50%; background: var(--color-cream); }
+.map-home .ring { position: absolute; left: -2px; top: -2px; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--color-cream); animation: homeRing 2.2s ease-out infinite; }
+.map-home .lbl { position: absolute; right: 16px; top: -16px; font-family: var(--font-inter), sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: 1.6px; color: rgb(245 243 234 / 0.6); white-space: nowrap; text-shadow: 0 0 4px var(--color-ink); }
