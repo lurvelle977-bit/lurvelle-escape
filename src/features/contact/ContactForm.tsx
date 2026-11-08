@@ -10,7 +10,7 @@ import { formFields, MESSAGE_MAX_LENGTH } from "./fields";
 const SENT_DURATION_MS = 2600;
 
 // Underlined fields on mobile, boxed fields with a focus glow from tablet up
-const fieldClasses =
+export const fieldClasses =
   "peer w-full border-0 border-b border-cream/20 bg-transparent py-[13px] font-sans text-[15px] text-cream outline-none transition-[border-color,box-shadow] duration-300 focus:border-gold md:rounded-[4px] md:border md:border-cream/14 md:bg-ink/50 md:px-[18px] md:py-4 md:text-[14.5px] md:not-placeholder-shown:border-gold/50 md:focus:border-gold md:focus:ring-3 md:focus:ring-gold/15";
 
 // Contact form with native validation, filled checkmarks and an animated send button

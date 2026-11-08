@@ -17,7 +17,7 @@ export const EMAIL_HREF = `mailto:${EMAIL}`;
 export const RATING = { score: "4.9", reviews: 312, award: "Travellers' Choice 2026" };
 
 // Booking link used by every "Book" button
-export const BOOKING_HREF = "/#contact";
+export const BOOKING_HREF = "/book";
 
 // Main navigation links (num is shown in the mobile menu)
 export type NavLink = {
