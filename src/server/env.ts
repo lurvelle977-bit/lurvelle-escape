@@ -26,6 +26,17 @@ export const env = {
   get siteUrl() {
     return (read("NEXT_PUBLIC_SITE_URL") ?? "http://localhost:3000").replace(/\/$/, "");
   },
+  cloudinary: {
+    get cloudName() {
+      return read("CLOUDINARY_CLOUD_NAME");
+    },
+    get apiKey() {
+      return read("CLOUDINARY_API_KEY");
+    },
+    get apiSecret() {
+      return read("CLOUDINARY_API_SECRET");
+    },
+  },
   email: {
     get apiKey() {
       return read("RESEND_API_KEY");

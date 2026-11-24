@@ -11,16 +11,18 @@ export function useAdminAction() {
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
 
-  const run = async (method: "POST" | "PATCH", url: string, body?: unknown, successMessage = "Saved") => {
+  const run = async (method: "POST" | "PATCH" | "DELETE", url: string, body?: unknown, successMessage = "Saved") => {
     if (busy) return false;
     setBusy(true);
     setError("");
     setDone("");
     try {
+      // FormData (file uploads) gets its multipart Content-Type from the browser
+      const isForm = body instanceof FormData;
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers: isForm ? undefined : { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
       });
       const result = await response.json().catch(() => null);
       if (response.status === 401) {

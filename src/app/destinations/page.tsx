@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
 import DestinationsExplorer from "@/features/destinations/DestinationsExplorer";
+import { getPublicDestinations } from "@/server/services/content.service";
 
 export const metadata: Metadata = {
   title: "Destinations",
@@ -9,11 +10,12 @@ export const metadata: Metadata = {
 };
 
 // Destinations page: interactive map of tours around Portugal
-export default function DestinationsPage() {
+export default async function DestinationsPage() {
+  const { tours, defaultId } = await getPublicDestinations();
   return (
     <>
       <Navbar page="destinations" />
-      <DestinationsExplorer />
+      <DestinationsExplorer tours={tours} defaultId={defaultId} />
       <Footer wide />
     </>
   );

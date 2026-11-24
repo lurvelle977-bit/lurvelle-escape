@@ -1,16 +1,22 @@
 import Link from "next/link";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { BOOKING_HREF } from "@/config/site";
-import { cardTours, customTour, featuredTour, formatDuration, formatPrice, rowTours } from "@/content/tours";
+import { customTour, formatDuration, formatPrice, type Experience } from "@/content/tours";
+import { getHomeExperiences } from "@/server/services/content.service";
 import ExperienceCard from "./ExperienceCard";
 
-// Text-only rows: the remaining tours plus the custom tour
-const rows = [
-  ...rowTours.map((tour) => ({ name: tour.name, duration: formatDuration(tour), price: formatPrice(tour) })),
-  customTour,
-];
+// Layout: one large featured card, up to four photo cards, then text rows (any remaining experiences, then the custom tour)
+function arrange(experiences: Experience[]) {
+  const withPhoto = experiences.filter((e) => e.image);
+  const featured = experiences.find((e) => e.featured && e.image) ?? withPhoto[0];
+  const cards = withPhoto.filter((e) => e !== featured).slice(0, 4);
+  const rowSource = experiences.filter((e) => e !== featured && !cards.includes(e));
+  const rows = [...rowSource.map((e) => ({ name: e.name, duration: formatDuration(e), price: formatPrice(e) })), customTour];
+  return { featured, cards, rows };
+}
 
-export default function Experiences() {
+export default async function Experiences() {
+  const { featured, cards, rows } = arrange(await getHomeExperiences());
   return (
     <section id="experiences" className="pt-[90px] pb-5 lg:pt-[130px] lg:pb-10">
       <div className="site-container">
@@ -28,8 +34,8 @@ export default function Experiences() {
 
         {/* Featured tour and photo cards */}
         <div className="mt-10 grid grid-cols-2 gap-x-4 md:mt-12 md:gap-x-6 lg:mt-16 lg:grid-cols-[1.6fr_1fr_1fr] lg:gap-x-10">
-          <ExperienceCard tour={featuredTour} featured />
-          {cardTours.map((tour) => (
+          {featured && <ExperienceCard tour={featured} featured />}
+          {cards.map((tour) => (
             <ExperienceCard key={tour.id} tour={tour} />
           ))}
         </div>

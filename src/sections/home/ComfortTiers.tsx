@@ -1,8 +1,10 @@
 import SectionHeader from "@/components/ui/SectionHeader";
-import { pricingNotes, tiers } from "@/content/tiers";
+import { pricingNotes } from "@/content/tiers";
+import { getHomeTiers } from "@/server/services/content.service";
 import TierCard from "./TierCard";
 
-export default function ComfortTiers() {
+export default async function ComfortTiers() {
+  const tiers = await getHomeTiers();
   return (
     <section id="tiers" className="pt-[90px] lg:pt-[130px]">
       <div className="site-container">
@@ -11,7 +13,7 @@ export default function ComfortTiers() {
         {/* Tier cards */}
         <div className="mt-10 flex flex-col gap-4 md:mt-12 md:grid md:grid-cols-3 lg:mt-16 lg:gap-0 lg:border-t lg:border-cream/10">
           {tiers.map((tier) => (
-            <TierCard key={tier.name} tier={tier} />
+            <TierCard key={`${tier.name}-${tier.eyebrow}`} tier={tier} />
           ))}
         </div>
 

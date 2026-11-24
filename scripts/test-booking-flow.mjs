@@ -73,7 +73,7 @@ const count = (await db.query("select count(*) from bookings where idempotency_k
 check("duplicate submission created only one row", count === "1");
 
 // ---- Custom destination: catalog field must not leak in
-r = await api("POST", "/api/bookings", valid({ bookingType: "vehicle", destinationType: "custom", destination: "lisbon", customDestination: "Sintra palaces, private day" , travelDate: future(10)}), { auth: false });
+r = await api("POST", "/api/bookings", valid({ bookingType: "vehicle", vehicleCategory: "VAN", destinationType: "custom", destination: "lisbon", customDestination: "Sintra palaces, private day" , travelDate: future(10)}), { auth: false });
 check("custom booking created", r.status === 201);
 const ref2 = r.json.data.reference;
 const row2 = (await db.query("select destination_id, custom_destination, destination_type, booking_type from bookings where reference=$1", [ref2])).rows[0];
@@ -146,12 +146,12 @@ r = await api("PATCH", `/api/bookings/${ref1}`, { token: token1, notes: "x" }, {
 check("customer edit blocked once under review? (UNDER_REVIEW is still editable)", r.status === 200);
 
 // ---- Resources & availability
-const veh = await api("POST", "/api/admin/vehicles", { name: "Mercedes V-Class", vehicleClass: "Business Van", plate: "AB-12-CD", passengerCapacity: 7 });
+const veh = await api("POST", "/api/admin/vehicles", { name: "Mercedes V-Class", category: "VAN", plate: "AB-12-CD", passengerCapacity: 7 });
 check("vehicle created", veh.status === 201, JSON.stringify(veh.json));
-const small = await api("POST", "/api/admin/vehicles", { name: "Skoda Superb", vehicleClass: "Standard", plate: "ZZ-00-ZZ", passengerCapacity: 3 });
+const small = await api("POST", "/api/admin/vehicles", { name: "Skoda Superb", category: "STANDARD_COMFORT", plate: "ZZ-00-ZZ", passengerCapacity: 3 });
 const drv = await api("POST", "/api/admin/drivers", { name: "João Pereira", phone: "+351 911 000 111" });
 check("driver created with E.164 phone", drv.status === 201 && drv.json.data.phone === "+351911000111", JSON.stringify(drv.json));
-r = await api("POST", "/api/admin/vehicles", { name: "dup", vehicleClass: "x1", plate: "ab-12-cd", passengerCapacity: 4 });
+r = await api("POST", "/api/admin/vehicles", { name: "dup", category: "ECONOMY", plate: "ab-12-cd", passengerCapacity: 4 });
 check("duplicate plate -> 409", r.status === 409);
 r = await api("GET", `/api/bookings/${ref1}/assignment`);
 check("availability lists vehicle & driver", r.json.data.vehicles.length === 2 && r.json.data.drivers.length === 1);
@@ -268,6 +268,69 @@ check("DB rejects invalid status value", bad);
 bad = false;
 try { await db.query("update bookings set destination_type='CUSTOM', destination_id=null, custom_destination=null where reference=$1", [ref2]); } catch { bad = true; }
 check("DB rejects inconsistent destination fields", bad);
+
+// ---- Vehicle category, category-matched assignment, soft delete
+r = await api("POST", "/api/bookings", valid({ bookingType: "vehicle", destinationType: "custom", customDestination: "Porto" }), { auth: false });
+check("vehicle booking without category -> 400", r.status === 400 && r.json.error.details.vehicleCategory, JSON.stringify(r.json));
+r = await api("POST", "/api/bookings", valid({ bookingType: "vehicle", vehicleCategory: "SPACESHIP", destinationType: "custom", customDestination: "Porto" }), { auth: false });
+check("invalid category -> 400", r.status === 400 && r.json.error.details.vehicleCategory);
+r = await api("POST", "/api/bookings", valid({ vehicleCategory: "VAN", travelDate: future(40), email: "t1@example.com" }), { auth: false });
+const tourRef = r.json.data.reference;
+check("tour booking ignores a posted category", (await db.query("select vehicle_category from bookings where reference=$1", [tourRef])).rows[0].vehicle_category === null);
+check("category stored for vehicle booking", (await db.query("select vehicle_category from bookings where reference=$1", [ref2])).rows[0].vehicle_category === "VAN");
+bad = false;
+try { await db.query("insert into bookings (reference, booking_type, destination_type, custom_destination, travel_date, pickup_location, passengers, customer_id) select 'XX1', 'VEHICLE_RIDE', 'CUSTOM', 'x', current_date + 5, 'x', 1, id from customers limit 1"); } catch { bad = true; }
+check("DB rejects a new vehicle booking without category", bad);
+
+const first = await api("POST", "/api/admin/vehicles", { name: "Mercedes S-Class", category: "FIRST_CLASS", plate: "FC-01-FC", passengerCapacity: 3 });
+const van2 = await api("POST", "/api/admin/vehicles", { name: "Vito", category: "VAN", plate: "VA-02-VA", passengerCapacity: 8 });
+const inactiveVan = await api("POST", "/api/admin/vehicles", { name: "Old Van", category: "VAN", plate: "OV-03-OV", passengerCapacity: 8 });
+await db.query("update vehicles set is_active=false where id=$1", [inactiveVan.json.data.id]);
+r = await api("POST", "/api/bookings", valid({ bookingType: "vehicle", vehicleCategory: "FIRST_CLASS", destinationType: "custom", customDestination: "Cascais", travelDate: future(50), passengers: 2, email: "fc@example.com", name: "Fiona First" }), { auth: false });
+const fcRef = r.json.data.reference;
+r = await api("GET", `/api/bookings/${fcRef}`);
+check("admin detail exposes vehicleCategory", r.json.data.booking.vehicleCategory === "FIRST_CLASS");
+r = await api("GET", "/api/bookings?q=Fiona");
+check("admin list exposes vehicleCategory", r.json.data.items[0]?.vehicleCategory === "FIRST_CLASS");
+await api("PATCH", `/api/bookings/${fcRef}/status`, { status: "UNDER_REVIEW" });
+r = await api("GET", `/api/bookings/${fcRef}/assignment`);
+check("availability only lists the requested category", r.json.data.vehicles.length === 1 && r.json.data.vehicles[0].id === first.json.data.id, JSON.stringify(r.json.data.vehicles.map((v) => v.name)));
+check("availability returns booking info", r.json.data.booking.vehicleCategory === "FIRST_CLASS" && r.json.data.booking.customerName === "Fiona First");
+r = await api("POST", `/api/bookings/${fcRef}/assignment`, { vehicleId: van2.json.data.id });
+check("backend rejects a category mismatch (409)", r.status === 409, JSON.stringify(r.json));
+r = await api("POST", `/api/bookings/${fcRef}/assignment`, { vehicleId: inactiveVan.json.data.id });
+check("inactive vehicle rejected", r.status >= 400);
+r = await api("POST", `/api/bookings/${fcRef}/assignment`, { vehicleId: first.json.data.id });
+check("matching category assigned", r.status === 200);
+r = await api("PATCH", `/api/bookings/${fcRef}`, { passengers: 6 });
+check("admin edit that outgrows the assigned vehicle -> 409", r.status === 409, JSON.stringify(r.json));
+r = await api("POST", `/api/bookings/${fcRef}/assignment`, { vehicleId: null });
+check("assignment can be cleared", r.status === 200 && r.json.data.vehicleId === null);
+
+// soft delete
+r = await api("DELETE", `/api/bookings/${fcRef}`, undefined, { auth: false });
+check("delete requires admin (401)", r.status === 401);
+await api("POST", `/api/bookings/${fcRef}/assignment`, { vehicleId: first.json.data.id });
+r = await api("DELETE", `/api/bookings/${fcRef}`);
+check("admin soft delete", r.status === 200);
+const del = (await db.query("select deleted_at from bookings where reference=$1", [fcRef])).rows[0];
+check("row kept with deleted_at set", !!del?.deleted_at);
+const delEv = (await db.query("select event_type from booking_events e join bookings b on b.id=e.booking_id where b.reference=$1 order by e.created_at desc limit 1", [fcRef])).rows[0];
+check("deletion recorded in booking_events", delEv?.event_type === "BOOKING_DELETED");
+r = await api("GET", "/api/bookings?q=Fiona");
+check("deleted booking hidden from list and count", r.json.data.total === 0);
+r = await api("GET", `/api/bookings/${fcRef}`);
+check("deleted booking is 404", r.status === 404);
+r = await api("PATCH", `/api/bookings/${fcRef}`, { notes: "x" });
+check("deleted booking cannot be modified", r.status === 404);
+r = await api("POST", `/api/bookings/${fcRef}/assignment`, { vehicleId: first.json.data.id });
+check("deleted booking cannot be assigned", r.status === 404);
+r = await api("DELETE", `/api/bookings/${fcRef}`);
+check("deleting twice -> 404", r.status === 404);
+r = await api("POST", "/api/bookings", valid({ bookingType: "vehicle", vehicleCategory: "FIRST_CLASS", destinationType: "custom", customDestination: "Cascais", travelDate: future(50), passengers: 2, email: "fc2@example.com", name: "Second FC" }), { auth: false });
+await api("PATCH", `/api/bookings/${r.json.data.reference}/status`, { status: "UNDER_REVIEW" });
+r = await api("POST", `/api/bookings/${r.json.data.reference}/assignment`, { vehicleId: first.json.data.id });
+check("vehicle freed by the deleted booking can be assigned again", r.status === 200, JSON.stringify(r.json));
 
 await db.end();
 const failed = results.filter(([ok]) => !ok);

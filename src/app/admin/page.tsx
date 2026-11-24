@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import BookingRowActions from "@/features/admin/BookingRowActions";
+import { VEHICLE_CATEGORIES } from "@/lib/vehicleCategories";
 import { adminButton, adminField, formatDateTime, StatusBadge } from "@/features/admin/ui";
 import { requireAdminPage } from "@/server/auth/page";
 import { BOOKING_STATUSES } from "@/server/domain/status";
@@ -26,6 +29,9 @@ export default async function AdminBookingsPage({ searchParams }: PageProps<"/ad
     return `/admin?${params}`;
   };
 
+  // e.g. the last row of the last page was just deleted: go to the new last page, keeping the filters
+  if (page > pages) redirect(link(pages));
+
   return (
     <>
       <h1 className="font-serif text-[30px] text-cream">Bookings</h1>
@@ -47,20 +53,23 @@ export default async function AdminBookingsPage({ searchParams }: PageProps<"/ad
       </form>
 
       <div className="mt-6 overflow-x-auto rounded-md bg-charcoal/65 shadow-form">
-        <table className="w-full min-w-[820px] text-left text-[13.5px]">
+        <table className="w-full min-w-[1180px] text-left text-[13.5px]">
           <thead className="text-[11px] tracking-[1.5px] text-muted uppercase">
             <tr>
               <th className="p-4 font-semibold">Reference</th>
               <th className="p-4 font-semibold">Customer</th>
               <th className="p-4 font-semibold">Trip</th>
-              <th className="p-4 font-semibold">Travel date</th>
+              <th className="p-4 font-semibold">Travel Date</th>
+              <th className="p-4 font-semibold">Vehicle Category</th>
+              <th className="p-4 font-semibold">Assigned Vehicle</th>
               <th className="p-4 font-semibold">Status</th>
               <th className="p-4 font-semibold">Requested</th>
+              <th className="p-4 font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan={6} className="p-6 text-center text-muted">No bookings match.</td></tr>
+              <tr><td colSpan={9} className="p-6 text-center text-muted">No bookings match.</td></tr>
             )}
             {items.map((booking) => (
               <tr key={booking.id} className="border-t border-cream/8 hover:bg-cream/4">
@@ -68,8 +77,28 @@ export default async function AdminBookingsPage({ searchParams }: PageProps<"/ad
                 <td className="p-4 text-cream">{booking.customer.name}<div className="text-[12px] text-muted">{booking.customer.email}</div></td>
                 <td className="p-4 text-cream">{booking.destinationName ?? booking.customDestination}<div className="text-[12px] text-muted">{booking.bookingType === "TOUR_PACKAGE" ? "Tour package" : "Vehicle / ride"} · {booking.passengers} pax</div></td>
                 <td className="p-4 text-cream">{booking.travelDate}</td>
+                <td className="p-4 text-cream">
+                  {booking.bookingType === "TOUR_PACKAGE" ? (
+                    <span className="text-muted">Not Applicable</span>
+                  ) : booking.vehicleCategory ? (
+                    VEHICLE_CATEGORIES[booking.vehicleCategory]
+                  ) : (
+                    <span className="text-muted">Not Specified</span>
+                  )}
+                </td>
+                <td className="p-4 text-cream">
+                  {booking.vehicleName ? (
+                    <>
+                      {booking.vehicleName}
+                      <div className="text-[12px] text-muted">{booking.vehiclePlate}</div>
+                    </>
+                  ) : (
+                    <span className="text-[12.5px] text-muted">Not Assigned</span>
+                  )}
+                </td>
                 <td className="p-4"><StatusBadge status={booking.status} /></td>
                 <td className="p-4 text-muted">{formatDateTime(booking.createdAt)}</td>
+                <td className="p-4"><BookingRowActions reference={booking.reference} customerName={booking.customer.name} status={booking.status} /></td>
               </tr>
             ))}
           </tbody>

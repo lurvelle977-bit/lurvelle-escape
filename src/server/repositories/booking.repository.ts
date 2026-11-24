@@ -1,4 +1,5 @@
 import type { Queryable } from "../db/pool";
+import type { VehicleCategory } from "@/lib/vehicleCategories";
 import type { BookingStatus } from "../domain/status";
 
 export type BookingRecord = {
@@ -13,6 +14,7 @@ export type BookingRecord = {
   pickupLocation: string;
   passengers: number;
   notes: string | null;
+  vehicleCategory: VehicleCategory | null;
   status: BookingStatus;
   quotedAmount: number | null;
   currency: string;
@@ -20,6 +22,7 @@ export type BookingRecord = {
   vehicleId: string | null;
   vehicleName: string | null;
   vehiclePlate: string | null;
+  vehicleCapacity: number | null;
   driverId: string | null;
   driverName: string | null;
   driverPhone: string | null;
@@ -41,6 +44,7 @@ type Row = {
   pickup_location: string;
   passengers: number;
   notes: string | null;
+  vehicle_category: VehicleCategory | null;
   status: BookingStatus;
   quoted_amount: string | null;
   currency: string;
@@ -48,6 +52,7 @@ type Row = {
   vehicle_id: string | null;
   vehicle_name: string | null;
   vehicle_plate: string | null;
+  vehicle_capacity: number | null;
   driver_id: string | null;
   driver_name: string | null;
   driver_phone: string | null;
@@ -63,7 +68,7 @@ type Row = {
 const SELECT = `
   SELECT b.*, to_char(b.travel_date, 'YYYY-MM-DD') AS travel_date,
          c.name AS customer_name, c.email AS customer_email, c.whatsapp AS customer_whatsapp,
-         d.name AS destination_name, v.name AS vehicle_name, v.plate AS vehicle_plate,
+         d.name AS destination_name, v.name AS vehicle_name, v.plate AS vehicle_plate, v.passenger_capacity AS vehicle_capacity,
          dr.name AS driver_name, dr.phone AS driver_phone
   FROM bookings b
   JOIN customers c ON c.id = b.customer_id
@@ -84,6 +89,7 @@ function toRecord(row: Row): BookingRecord {
     pickupLocation: row.pickup_location,
     passengers: row.passengers,
     notes: row.notes,
+    vehicleCategory: row.vehicle_category,
     status: row.status,
     quotedAmount: row.quoted_amount === null ? null : Number(row.quoted_amount),
     currency: row.currency,
@@ -91,6 +97,7 @@ function toRecord(row: Row): BookingRecord {
     vehicleId: row.vehicle_id,
     vehicleName: row.vehicle_name,
     vehiclePlate: row.vehicle_plate,
+    vehicleCapacity: row.vehicle_capacity,
     driverId: row.driver_id,
     driverName: row.driver_name,
     driverPhone: row.driver_phone,
@@ -107,7 +114,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function findBooking(client: Queryable, idOrReference: string, lock = false): Promise<BookingRecord | null> {
   const column = UUID.test(idOrReference) ? "b.id" : "b.reference";
   // FOR UPDATE OF b locks only the booking row, not the joined lookups
-  const { rows } = await client.query<Row>(`${SELECT} WHERE ${column} = $1 ${lock ? "FOR UPDATE OF b" : ""}`, [idOrReference]);
+  const { rows } = await client.query<Row>(`${SELECT} WHERE ${column} = $1 AND b.deleted_at IS NULL ${lock ? "FOR UPDATE OF b" : ""}`, [idOrReference]);
   return rows[0] ? toRecord(rows[0]) : null;
 }
 
@@ -119,7 +126,8 @@ export async function findByIdempotencyKey(client: Queryable, key: string): Prom
 export type ListFilters = { q?: string; status?: BookingStatus; type?: BookingRecord["bookingType"]; page: number; pageSize: number };
 
 export async function listBookings(client: Queryable, filters: ListFilters) {
-  const where: string[] = [];
+  // Soft-deleted bookings never appear in the list, search results or counts
+  const where: string[] = ["b.deleted_at IS NULL"];
   const values: unknown[] = [];
   if (filters.status) where.push(`b.status = $${values.push(filters.status)}`);
   if (filters.type) where.push(`b.booking_type = $${values.push(filters.type)}`);
@@ -149,19 +157,6 @@ export async function upsertCustomer(client: Queryable, input: { name: string; e
   return rows[0].id;
 }
 
-export async function upsertDestination(
-  client: Queryable,
-  input: { slug: string; name: string; description: string; basePrice: number },
-): Promise<string> {
-  const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO destinations (slug, name, description, base_price) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, base_price = EXCLUDED.base_price
-     RETURNING id`,
-    [input.slug, input.name, input.description, input.basePrice],
-  );
-  return rows[0].id;
-}
-
 export async function activeDestinationId(client: Queryable, slug: string): Promise<{ id: string; active: boolean } | null> {
   const { rows } = await client.query<{ id: string; is_active: boolean }>("SELECT id, is_active FROM destinations WHERE slug = $1", [slug]);
   return rows[0] ? { id: rows[0].id, active: rows[0].is_active } : null;
@@ -179,14 +174,15 @@ export async function insertBooking(
     pickupLocation: string;
     passengers: number;
     notes: string | null;
+    vehicleCategory: VehicleCategory | null;
     customerId: string;
     idempotencyKey: string | null;
   },
 ): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO bookings (reference, booking_type, destination_type, destination_id, custom_destination, travel_date,
-                           pickup_location, passengers, notes, customer_id, idempotency_key)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+                           pickup_location, passengers, notes, customer_id, idempotency_key, vehicle_category)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
     [
       input.reference,
       input.bookingType,
@@ -199,6 +195,7 @@ export async function insertBooking(
       input.notes,
       input.customerId,
       input.idempotencyKey,
+      input.vehicleCategory,
     ],
   );
   return rows[0].id;
@@ -238,4 +235,9 @@ export async function setQuote(client: Queryable, id: string, amount: number, cu
 
 export async function setPaymentStatus(client: Queryable, id: string, status: BookingRecord["paymentStatus"]) {
   await client.query("UPDATE bookings SET payment_status = $2 WHERE id = $1", [id, status]);
+}
+
+// Soft delete: the row and everything linked to it stay for the record
+export async function markDeleted(client: Queryable, id: string) {
+  await client.query("UPDATE bookings SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", [id]);
 }

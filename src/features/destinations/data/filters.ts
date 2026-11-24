@@ -13,9 +13,6 @@ export type BudgetOption = {
 // Starting point for routes ("You are here")
 export const HOME_LOCATION = { lon: -9.139, lat: 38.722 };
 
-// Tour selected when the page opens
-export const DEFAULT_TOUR_ID = "sintra";
-
 export const regions: RegionFilter[] = ["All", "Lisbon", "Coast", "Centre", "Alentejo", "North"];
 
 export const budgets: BudgetOption[] = [

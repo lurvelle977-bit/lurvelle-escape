@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { tours } from "@/content/tours";
+import { VEHICLE_CATEGORIES } from "@/lib/vehicleCategories";
 import { isValidCustomerToken } from "../auth/tokens";
 import { db, withTransaction } from "../db/pool";
 import { generateReference } from "../domain/reference";
@@ -34,6 +34,18 @@ export async function lockBooking(client: PoolClient, idOrReference: string): Pr
   const booking = await bookings.findBooking(client, idOrReference, true);
   if (!booking) throw notFound();
   return booking;
+}
+
+// Every rule a vehicle must satisfy to serve a booking. Used when assigning and when a date or headcount changes,
+// so the server never trusts what the admin UI filtered. Date availability is enforced by the unique indexes.
+export function assertVehicleFits(vehicle: resources.VehicleRecord | null, booking: BookingRecord, passengers: number): asserts vehicle is resources.VehicleRecord {
+  if (!vehicle || !vehicle.isActive) throw new AppError("VALIDATION_FAILED", "Choose an active vehicle.", { vehicleId: ["Unavailable vehicle"] });
+  if (booking.vehicleCategory && vehicle.category !== booking.vehicleCategory) {
+    throw conflict(
+      `${vehicle.name} is a ${VEHICLE_CATEGORIES[vehicle.category]} vehicle, but the customer requested ${VEHICLE_CATEGORIES[booking.vehicleCategory]}.`,
+    );
+  }
+  if (vehicle.passengerCapacity < passengers) throw conflict(`${vehicle.name} seats ${vehicle.passengerCapacity}, but the booking has ${passengers} passengers.`);
 }
 
 // The only place a booking's status changes: validates the move, writes it and records it in the history
@@ -73,12 +85,11 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
       const id = await withTransaction(async (client) => {
         let destinationId: string | null = null;
         if (input.destinationType === "CATALOG") {
-          // The catalog lives in src/content/tours.ts; rows are created on first use so bookings can reference them
-          const tour = tours.find((entry) => entry.id === input.destination);
-          if (!tour) throw new AppError("VALIDATION_FAILED", "Please choose a valid destination.", { destination: ["Unknown destination"] });
-          destinationId = await bookings.upsertDestination(client, { slug: tour.id, name: tour.name, description: tour.blurb, basePrice: tour.cost });
-          const row = await bookings.activeDestinationId(client, tour.id);
-          if (!row?.active) throw new AppError("VALIDATION_FAILED", "That destination is not available right now.", { destination: ["Unavailable"] });
+          // The catalog is managed in the admin (Content Management); the form submits the destination's slug
+          const row = await bookings.activeDestinationId(client, input.destination ?? "");
+          if (!row) throw new AppError("VALIDATION_FAILED", "Please choose a valid destination.", { destination: ["Unknown destination"] });
+          if (!row.active) throw new AppError("VALIDATION_FAILED", "That destination is not available right now.", { destination: ["Unavailable"] });
+          destinationId = row.id;
         }
         const customerId = await bookings.upsertCustomer(client, { name: input.name, email: input.email, whatsapp: input.whatsapp });
         const bookingId = await bookings.insertBooking(client, {
@@ -91,6 +102,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
           pickupLocation: input.pickupLocation,
           passengers: input.passengers,
           notes: input.notes,
+          vehicleCategory: input.vehicleCategory,
           customerId,
           idempotencyKey: input.idempotencyKey ?? null,
         });
@@ -134,7 +146,7 @@ export async function getAdminBookingDetail(idOrReference: string) {
     workflow.listQuotations(db, booking.id),
     workflow.listPayments(db, booking.id),
     workflow.listNotifications(db, booking.id),
-    resources.availableVehicles(db, booking.travelDate, booking.passengers, booking.id),
+    resources.availableVehicles(db, booking.travelDate, booking.passengers, booking.id, booking.vehicleCategory),
     resources.availableDrivers(db, booking.travelDate, booking.id),
   ]);
   return { booking, events, quotations, payments, notifications, availability: { vehicles, drivers } };
@@ -192,9 +204,15 @@ export async function updateBooking(idOrReference: string, changes: Changes, act
       throw invalidState("This request is already being processed. Please contact us to change it.");
     }
     if (booking.status === "CANCELLED" || booking.status === "COMPLETED") throw invalidState("This booking is closed and cannot be edited.");
-    if (changes.passengers && booking.vehicleId) {
+    // An existing assignment must still fit the changed headcount. A changed date is checked by the double-booking indexes.
+    if ((changes.passengers || changes.travelDate) && booking.vehicleId) {
       const vehicle = await resources.getVehicle(client, booking.vehicleId);
-      if (vehicle && vehicle.passengerCapacity < changes.passengers) throw conflict("The assigned vehicle cannot seat that many passengers.");
+      try {
+        assertVehicleFits(vehicle, booking, changes.passengers ?? booking.passengers);
+      } catch (error) {
+        if (error instanceof AppError) throw conflict(`${error.message} Change or clear the vehicle assignment first.`);
+        throw error;
+      }
     }
     try {
       await bookings.updateDetails(client, booking.id, changes);
@@ -243,14 +261,30 @@ export async function changeStatus(idOrReference: string, to: BookingStatus, not
 
 // ---------- Availability and assignment ----------
 
+const canAssignResources = (status: BookingStatus) => status !== "PENDING" && ACTIVE_STATUSES.includes(status);
+
 export async function getAvailability(idOrReference: string) {
   const booking = await bookings.findBooking(db, idOrReference);
   if (!booking) throw notFound();
   const [vehicles, drivers] = await Promise.all([
-    resources.availableVehicles(db, booking.travelDate, booking.passengers, booking.id),
+    resources.availableVehicles(db, booking.travelDate, booking.passengers, booking.id, booking.vehicleCategory),
     resources.availableDrivers(db, booking.travelDate, booking.id),
   ]);
-  return { travelDate: booking.travelDate, passengers: booking.passengers, vehicles, drivers };
+  return {
+    booking: {
+      reference: booking.reference,
+      status: booking.status,
+      customerName: booking.customer.name,
+      travelDate: booking.travelDate,
+      passengers: booking.passengers,
+      vehicleCategory: booking.vehicleCategory,
+      vehicleId: booking.vehicleId,
+      driverId: booking.driverId,
+      canAssign: canAssignResources(booking.status),
+    },
+    vehicles,
+    drivers,
+  };
 }
 
 export async function assignResources(
@@ -260,16 +294,15 @@ export async function assignResources(
 ): Promise<BookingRecord> {
   const id = await withTransaction(async (client) => {
     const booking = await lockBooking(client, idOrReference);
-    if (!ACTIVE_STATUSES.includes(booking.status)) throw invalidState("Vehicles and drivers can only be assigned to open bookings under review.");
     if (booking.status === "PENDING") throw invalidState("Start the review before assigning a vehicle or driver.");
+    if (!canAssignResources(booking.status)) throw invalidState("Vehicles and drivers can only be assigned to open bookings under review.");
 
     const vehicleId = input.vehicleId === undefined ? booking.vehicleId : input.vehicleId;
     const driverId = input.driverId === undefined ? booking.driverId : input.driverId;
 
     if (vehicleId) {
-      const vehicle = await resources.getVehicle(client, vehicleId);
-      if (!vehicle || !vehicle.isActive) throw new AppError("VALIDATION_FAILED", "Choose an active vehicle.", { vehicleId: ["Unavailable vehicle"] });
-      if (vehicle.passengerCapacity < booking.passengers) throw conflict(`${vehicle.name} seats ${vehicle.passengerCapacity}, but the booking has ${booking.passengers} passengers.`);
+      // Active, same category as requested, enough seats; the unique indexes below catch a date clash
+      assertVehicleFits(await resources.getVehicle(client, vehicleId), booking, booking.passengers);
     }
     if (driverId) {
       const driver = await resources.getDriver(client, driverId);
@@ -293,6 +326,26 @@ export async function assignResources(
   return (await bookings.findBooking(db, id))!;
 }
 
+// ---------- Delete ----------
+
+// Soft delete: the booking disappears from the admin list but its quotations, payments, notifications and history stay.
+// The audit event is written first, in the same transaction, so a deletion is never unrecorded.
+export async function deleteBooking(idOrReference: string, actor: { type: "ADMIN"; id: string }): Promise<{ reference: string }> {
+  return withTransaction(async (client) => {
+    const booking = await lockBooking(client, idOrReference);
+    await workflow.addEvent(client, {
+      bookingId: booking.id,
+      type: "BOOKING_DELETED",
+      actor,
+      fromStatus: booking.status,
+      message: `Booking deleted by admin (was ${booking.status.toLowerCase().replace(/_/g, " ")})`,
+      metadata: { vehicleId: booking.vehicleId, driverId: booking.driverId },
+    });
+    await bookings.markDeleted(client, booking.id);
+    return { reference: booking.reference };
+  });
+}
+
 // ---------- Alternatives ----------
 
 export async function proposeAlternative(
@@ -304,9 +357,9 @@ export async function proposeAlternative(
     const booking = await lockBooking(client, idOrReference);
     let destinationId: string | undefined;
     if (input.proposedDestination) {
-      const tour = tours.find((entry) => entry.id === input.proposedDestination);
-      if (!tour) throw new AppError("VALIDATION_FAILED", "Unknown destination.", { proposedDestination: ["Unknown destination"] });
-      destinationId = await bookings.upsertDestination(client, { slug: tour.id, name: tour.name, description: tour.blurb, basePrice: tour.cost });
+      const row = await bookings.activeDestinationId(client, input.proposedDestination);
+      if (!row?.active) throw new AppError("VALIDATION_FAILED", "Unknown destination.", { proposedDestination: ["Unknown destination"] });
+      destinationId = row.id;
     }
     if (input.proposedVehicleId && !(await resources.getVehicle(client, input.proposedVehicleId))) {
       throw new AppError("VALIDATION_FAILED", "Unknown vehicle.", { proposedVehicleId: ["Unknown vehicle"] });

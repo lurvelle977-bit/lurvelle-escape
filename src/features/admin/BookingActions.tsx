@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { tours } from "@/content/tours";
 import { adminButton, adminField, Panel } from "./ui";
 import { useAdminAction } from "./useAdminAction";
 
 type Resource = { id: string; name: string; label: string };
 
 export type ActionProps = {
+  destinations: { id: string; name: string }[];
   reference: string;
   status: string;
   paymentStatus: string;
@@ -78,7 +78,7 @@ export default function BookingActions(props: ActionProps) {
 
       {canAssign && (
         <Panel title="Vehicle & driver">
-          <p className="mb-3 text-[13px] text-sand">Only vehicles with enough seats and drivers that are free on {props.travelDate} are listed.</p>
+          <p className="mb-3 text-[13px] text-sand">Only vehicles of the requested category with enough seats and drivers that are free on {props.travelDate} are listed.</p>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <label htmlFor="vehicle" className="sr-only">Vehicle</label>
@@ -122,7 +122,7 @@ export default function BookingActions(props: ActionProps) {
               <input name="proposedTravelDate" type="date" className={adminField} aria-label="Proposed date" />
               <select name="proposedDestination" className={adminField} aria-label="Proposed destination" defaultValue="">
                 <option value="">Same destination</option>
-                {tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.name}</option>)}
+                {props.destinations.map((destination) => <option key={destination.id} value={destination.id}>{destination.name}</option>)}
               </select>
             </div>
             <div><button type="submit" disabled={alternative.busy} className={adminButton("plain")}>Send alternative</button></div>

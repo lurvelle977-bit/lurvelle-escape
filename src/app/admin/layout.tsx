@@ -20,6 +20,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               <>
                 <Link href="/admin" className="text-sand hover:text-gold">Bookings</Link>
                 <Link href="/admin/resources" className="text-sand hover:text-gold">Vehicles &amp; drivers</Link>
+                <Link href="/admin/content" className="text-sand hover:text-gold">Content</Link>
               </>
             )}
           </nav>

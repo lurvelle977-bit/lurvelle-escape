@@ -30,3 +30,10 @@ export const PATCH = handle(async (request: NextRequest, ctx: RouteContext<"/api
   await bookingService.updateBooking(id, changes, { type: "CUSTOMER" });
   return ok(await bookingService.getCustomerBooking(id, token));
 });
+
+// Admin only: soft-delete a booking. The row and its history are kept; it just leaves the admin list.
+export const DELETE = handle(async (request: NextRequest, ctx: RouteContext<"/api/bookings/[id]">) => {
+  const admin = await requireAdmin(request);
+  const { id } = await ctx.params;
+  return ok(await bookingService.deleteBooking(id, { type: "ADMIN", id: admin.id }));
+});

@@ -1,11 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { BOOKING_HREF } from "@/config/site";
-import { formatDuration, formatPrice, type Tour } from "@/content/tours";
+import { formatDuration, formatPrice, type Experience } from "@/content/tours";
 import { cn } from "@/lib/cn";
 
 type ExperienceCardProps = {
-  tour: Tour;
+  tour: Experience;
   featured?: boolean;
 };
 
@@ -27,13 +27,15 @@ export default function ExperienceCard({ tour, featured = false }: ExperienceCar
             featured ? "h-[300px] md:h-[420px] lg:h-auto lg:min-h-[420px] lg:flex-1" : "h-[130px] md:h-[210px] lg:aspect-[3/2] lg:h-auto",
           )}
         >
-          <Image
-            src={tour.image}
-            alt={tour.name}
-            fill
-            sizes={featured ? "(min-width: 1024px) 40vw, 100vw" : "(min-width: 1024px) 25vw, 50vw"}
-            className="object-cover"
-          />
+          {tour.image && (
+            <Image
+              src={tour.image}
+              alt={tour.name}
+              fill
+              sizes={featured ? "(min-width: 1024px) 40vw, 100vw" : "(min-width: 1024px) 25vw, 50vw"}
+              className="object-cover"
+            />
+          )}
         </div>
       </div>
 

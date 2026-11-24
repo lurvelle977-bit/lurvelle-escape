@@ -26,7 +26,7 @@ export default function DestinationList({ tours, activeId, onSelect }: Destinati
               )}
             >
               <div className="relative h-[52px] w-[52px] shrink-0 overflow-hidden rounded-[2px] lg:h-14 lg:w-14">
-                <Image src={tour.image} alt="" fill sizes="56px" className="object-cover" />
+                {tour.image && <Image src={tour.image} alt="" fill sizes="56px" className="object-cover" />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-serif text-[15px] text-cream lg:text-base">{tour.name}</div>

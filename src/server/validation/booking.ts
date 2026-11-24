@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { VEHICLE_CATEGORY_KEYS, type VehicleCategory } from "@/lib/vehicleCategories";
 import { BOOKING_STATUSES } from "../domain/status";
 import { email, isoDate, optionalText, phone, text, todayIso, uuid } from "./common";
 
@@ -29,6 +30,8 @@ export const createBookingSchema = z
     bookingType,
     destinationType,
     destination: z.string().trim().max(100).optional().nullable(),
+    // Only the category is chosen by the customer; the admin assigns the actual vehicle
+    vehicleCategory: z.string().trim().max(40).optional().nullable(),
     customDestination: optionalText("Custom destination", 500),
     travelDate: futureDate,
     pickupLocation: text("Pickup location", 2, 300),
@@ -46,12 +49,21 @@ export const createBookingSchema = z
     if (value.destinationType === "CUSTOM" && !value.customDestination) {
       ctx.addIssue({ code: "custom", path: ["customDestination"], message: "Describe your destination" });
     }
+    if (value.bookingType === "VEHICLE_RIDE") {
+      if (!value.vehicleCategory) {
+        ctx.addIssue({ code: "custom", path: ["vehicleCategory"], message: "Choose a vehicle category" });
+      } else if (!(VEHICLE_CATEGORY_KEYS as readonly string[]).includes(value.vehicleCategory)) {
+        ctx.addIssue({ code: "custom", path: ["vehicleCategory"], message: "Choose a valid vehicle category" });
+      }
+    }
   })
   // Drop whichever destination field does not apply so nothing inconsistent reaches the database
   .transform((value) => ({
     ...value,
     destination: value.destinationType === "CATALOG" ? value.destination! : null,
     customDestination: value.destinationType === "CUSTOM" ? value.customDestination : null,
+    // Tour packages never store a category, even if one was posted
+    vehicleCategory: value.bookingType === "VEHICLE_RIDE" ? (value.vehicleCategory as VehicleCategory) : null,
   }));
 
 export type CreateBookingInput = z.output<typeof createBookingSchema>;

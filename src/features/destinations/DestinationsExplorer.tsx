@@ -6,13 +6,13 @@ import Link from "next/link";
 import { useState } from "react";
 import Eyebrow from "@/components/ui/Eyebrow";
 import { BOOKING_HREF, RATING } from "@/config/site";
-import { customTour, tours } from "@/content/tours";
+import { customTour, type Tour } from "@/content/tours";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
 import DestinationCard from "./DestinationCard";
 import DestinationFilters from "./DestinationFilters";
 import DestinationList from "./DestinationList";
 import MobileMap from "./MobileMap";
-import { budgets, DEFAULT_TOUR_ID, type RegionFilter } from "./data/filters";
+import { budgets, type RegionFilter } from "./data/filters";
 import { describeRoute } from "./lib/geo";
 
 // Leaflet needs the browser, so the desktop map only loads on the client
@@ -22,9 +22,10 @@ const LeafletMap = dynamic(() => import("./LeafletMap"), {
 });
 
 // Destinations page: filters, list, map and detail card
-export default function DestinationsExplorer() {
+// `tours` are the active destinations from the database; `defaultId` is the featured one the page opens on
+export default function DestinationsExplorer({ tours, defaultId }: { tours: Tour[]; defaultId: string | null }) {
   const isDesktop = useIsDesktop();
-  const [selectedId, setSelectedId] = useState(DEFAULT_TOUR_ID);
+  const [selectedId, setSelectedId] = useState(defaultId ?? "");
   const [region, setRegion] = useState<RegionFilter>("All");
   const [budgetIndex, setBudgetIndex] = useState(0);
 
@@ -55,6 +56,19 @@ export default function DestinationsExplorer() {
       </Link>
     </>
   );
+
+  if (tours.length === 0) {
+    return (
+      <main className="mx-auto max-w-[430px] px-5 pt-[104px] pb-[70px] md:max-w-[800px] md:px-10 md:pt-[120px] lg:pt-[150px]">
+        <Eyebrow>Destinations</Eyebrow>
+        <h1 className="mt-[14px] font-serif text-[32px] leading-[1.2] font-medium text-cream lg:text-[40px]">Where would you like to escape?</h1>
+        <p className="mt-[14px] text-[13.5px] leading-[1.7] text-muted">Our destinations are being updated. Tell us where you would like to go and we will plan it for you.</p>
+        <Link href={BOOKING_HREF} className="mt-6 inline-block text-gold">
+          Request a custom tour
+        </Link>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-[430px] overflow-x-hidden px-5 pt-[104px] pb-[70px] md:grid md:max-w-[800px] md:grid-cols-2 md:items-start md:gap-x-10 md:px-10 md:pt-[120px] lg:max-w-[clamp(1280px,82vw,1640px)] lg:grid-cols-[minmax(340px,400px)_1fr] lg:gap-12 lg:overflow-x-visible lg:px-8 lg:pt-[150px] lg:pb-[90px] xl:gap-16 2xl:grid-cols-[440px_1fr] 2xl:px-12">

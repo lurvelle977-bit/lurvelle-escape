@@ -5,12 +5,14 @@ import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "reac
 import { buttonClasses } from "@/components/ui/Button";
 import Eyebrow from "@/components/ui/Eyebrow";
 import { cn } from "@/lib/cn";
+import { VEHICLE_CATEGORIES, type VehicleCategory } from "@/lib/vehicleCategories";
 import { fieldClasses } from "@/features/contact/ContactForm";
 
 type Destination = { id: string; name: string };
 
 type FormData = {
   bookingType: "" | "tour" | "vehicle";
+  vehicleCategory: "" | VehicleCategory;
   destinationType: "" | "catalog" | "custom";
   destination: string;
   customDestination: string;
@@ -25,6 +27,7 @@ type FormData = {
 
 const initialData: FormData = {
   bookingType: "",
+  vehicleCategory: "",
   destinationType: "",
   destination: "",
   customDestination: "",
@@ -62,7 +65,15 @@ function Field({ id, label, error, children }: { id: string; label: string; erro
 }
 
 // Booking request form: choose a service and destination, then trip and contact details, review, and submit.
-export default function BookingForm({ destinations, initialDestination }: { destinations: Destination[]; initialDestination?: string }) {
+export default function BookingForm({
+  destinations,
+  initialDestination,
+  vehicleCategories,
+}: {
+  destinations: Destination[];
+  initialDestination?: string;
+  vehicleCategories: VehicleCategory[];
+}) {
   const router = useRouter();
   const preset = destinations.some((entry) => entry.id === initialDestination) ? initialDestination! : "";
   const [data, setData] = useState<FormData>({ ...initialData, destinationType: preset ? "catalog" : "", destination: preset });
@@ -85,6 +96,7 @@ export default function BookingForm({ destinations, initialDestination }: { dest
     event.preventDefault();
     setFormError("");
     if (!data.bookingType) return setErrors({ bookingType: ["Choose a service"] });
+    if (data.bookingType === "vehicle" && !data.vehicleCategory) return setErrors({ vehicleCategory: ["Choose a vehicle category"] });
     if (!data.destinationType) return setErrors({ destinationType: ["Choose how you would like to pick your destination"] });
     setErrors({});
     setStep("review");
@@ -123,6 +135,7 @@ export default function BookingForm({ destinations, initialDestination }: { dest
   if (step === "review") {
     const rows: [string, string][] = [
       ["Service", data.bookingType === "tour" ? "Tour package" : "Vehicle / ride"],
+      ...(data.bookingType === "vehicle" && data.vehicleCategory ? ([["Vehicle category", VEHICLE_CATEGORIES[data.vehicleCategory]]] as [string, string][]) : []),
       ["Destination", data.destinationType === "catalog" ? (destinationName ?? "") : data.customDestination],
       ["Travel date", data.travelDate],
       ["Pickup", data.pickupLocation],
@@ -169,7 +182,7 @@ export default function BookingForm({ destinations, initialDestination }: { dest
         <fieldset>
           <legend className="sr-only">Service</legend>
           <div className="grid grid-cols-2 gap-3">
-            <button type="button" aria-pressed={data.bookingType === "tour"} onClick={() => set("bookingType", "tour")} className={choiceClasses(data.bookingType === "tour")}>
+            <button type="button" aria-pressed={data.bookingType === "tour"} onClick={() => setData((previous) => ({ ...previous, bookingType: "tour", vehicleCategory: "" }))} className={choiceClasses(data.bookingType === "tour")}>
               Tour package
             </button>
             <button type="button" aria-pressed={data.bookingType === "vehicle"} onClick={() => set("bookingType", "vehicle")} className={choiceClasses(data.bookingType === "vehicle")}>
@@ -178,6 +191,19 @@ export default function BookingForm({ destinations, initialDestination }: { dest
           </div>
           {errors.bookingType && <p role="alert" className="mt-1.5 text-[12px] text-[#e8907f]">{errors.bookingType[0]}</p>}
         </fieldset>
+
+        {data.bookingType === "vehicle" && (
+          <Field id="booking-vehicleCategory" label="Vehicle category" error={errors.vehicleCategory}>
+            <select id="booking-vehicleCategory" required value={data.vehicleCategory} onChange={onText("vehicleCategory")} className={cn(fieldClasses, "appearance-none")} {...aria("vehicleCategory")}>
+              <option value="" className="bg-charcoal">Choose a vehicle</option>
+              {vehicleCategories.map((key) => (
+                <option key={key} value={key} className="bg-charcoal">
+                  {VEHICLE_CATEGORIES[key]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
 
         <fieldset>
           <legend className="sr-only">Destination</legend>

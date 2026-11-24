@@ -17,7 +17,7 @@ export default function DestinationCard({ tour, variant, routeInfo }: Destinatio
   return (
     <div className={desktop ? "animate-card-in" : "animate-card-in-mobile"}>
       <div className={cn("relative", desktop ? "h-[140px]" : "h-[150px]")}>
-        <Image src={tour.image} alt={tour.name} fill sizes="(min-width: 768px) 360px, 400px" className="object-cover" />
+        {tour.image && <Image src={tour.image} alt={tour.name} fill sizes="(min-width: 768px) 360px, 400px" className="object-cover" />}
       </div>
       <div className={desktop ? "px-5 pt-[18px] pb-5" : "px-[18px] pt-4 pb-[18px]"}>
         <h2 className={cn("font-serif text-cream", desktop ? "text-xl" : "text-[19px]")}>{tour.name}</h2>

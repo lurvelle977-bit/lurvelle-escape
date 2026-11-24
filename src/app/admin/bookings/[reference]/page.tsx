@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import BookingActions from "@/features/admin/BookingActions";
+import BookingEditPanel from "@/features/admin/BookingEditPanel";
+import { VEHICLE_CATEGORIES } from "@/lib/vehicleCategories";
 import { formatDateTime, Panel, StatusBadge } from "@/features/admin/ui";
 import { requireAdminPage } from "@/server/auth/page";
+import { db } from "@/server/db/pool";
 import { AppError } from "@/server/http/errors";
+import { listDestinations } from "@/server/repositories/content.repository";
 import { getAdminBookingDetail } from "@/server/services/booking.service";
 
 export const metadata: Metadata = { title: "Booking" };
@@ -19,16 +23,18 @@ export default async function AdminBookingPage({ params }: PageProps<"/admin/boo
   });
   if (!detail) notFound();
   const { booking, events, quotations, payments, notifications, availability } = detail;
+  const destinations = (await listDestinations(db, { onlyActive: true })).map((d) => ({ id: d.slug, name: d.name }));
   const pending = payments.find((payment) => payment.status === "PENDING");
 
   const rows: [string, string][] = [
     ["Type", booking.bookingType === "TOUR_PACKAGE" ? "Tour package" : "Vehicle / ride"],
+    ...(booking.bookingType === "VEHICLE_RIDE" ? ([["Vehicle category", booking.vehicleCategory ? VEHICLE_CATEGORIES[booking.vehicleCategory] : "Not specified"]] as [string, string][]) : []),
     ["Destination", `${booking.destinationName ?? booking.customDestination ?? "—"}${booking.destinationType === "CUSTOM" ? " (custom)" : ""}`],
     ["Travel date", booking.travelDate],
     ["Pickup", booking.pickupLocation],
     ["Passengers", String(booking.passengers)],
     ["Notes", booking.notes ?? "—"],
-    ["Vehicle", booking.vehicleName ? `${booking.vehicleName} (${booking.vehiclePlate})` : "Not assigned"],
+    ["Assigned vehicle", booking.vehicleName ? `${booking.vehicleName} (${booking.vehiclePlate})` : "Not assigned"],
     ["Driver", booking.driverName ? `${booking.driverName} · ${booking.driverPhone}` : "Not assigned"],
     ["Quoted", booking.quotedAmount === null ? "—" : `${booking.currency} ${booking.quotedAmount.toFixed(2)}`],
     ["Payment", booking.paymentStatus.replace(/_/g, " ")],
@@ -54,7 +60,7 @@ export default async function AdminBookingPage({ params }: PageProps<"/admin/boo
           <Panel title="Trip">
             <dl className="grid gap-2.5">
               {rows.map(([label, value]) => (
-                <div key={label} className="grid grid-cols-[100px_1fr] gap-3 text-[13.5px]">
+                <div key={label} className="grid grid-cols-[130px_1fr] gap-3 text-[13.5px]">
                   <dt className="text-muted">{label}</dt>
                   <dd className="break-words whitespace-pre-line text-cream">{value}</dd>
                 </div>
@@ -78,7 +84,18 @@ export default async function AdminBookingPage({ params }: PageProps<"/admin/boo
         </div>
 
         <div className="grid content-start gap-5">
+          {!["CANCELLED", "COMPLETED"].includes(booking.status) && (
+            <BookingEditPanel
+              key={booking.updatedAt}
+              reference={booking.reference}
+              travelDate={booking.travelDate}
+              pickupLocation={booking.pickupLocation}
+              passengers={booking.passengers}
+              notes={booking.notes}
+            />
+          )}
           <BookingActions
+            destinations={destinations}
             key={`${booking.status}-${booking.updatedAt}`}
             reference={booking.reference}
             status={booking.status}

@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
 import SectionHeader from "@/components/ui/SectionHeader";
-import { tours } from "@/content/tours";
 import BookingForm from "@/features/booking/BookingForm";
+import { VEHICLE_CATEGORY_KEYS } from "@/lib/vehicleCategories";
+import { db } from "@/server/db/pool";
+import { listVehicles } from "@/server/repositories/resource.repository";
+import { getPublicDestinations } from "@/server/services/content.service";
 
 export const metadata: Metadata = {
   title: "Book a tour or ride",
@@ -13,6 +16,10 @@ export const metadata: Metadata = {
 // Booking page: a request form, not an instant booking
 export default async function BookPage({ searchParams }: PageProps<"/book">) {
   const { destination } = await searchParams;
+  const { tours } = await getPublicDestinations();
+  // Only offer categories that have at least one active vehicle registered in the admin dashboard
+  const activeCategories = new Set((await listVehicles(db)).filter((vehicle) => vehicle.isActive).map((vehicle) => vehicle.category));
+  const vehicleCategories = VEHICLE_CATEGORY_KEYS.filter((key) => activeCategories.has(key));
   return (
     <>
       <Navbar page="destinations" />
@@ -24,6 +31,7 @@ export default async function BookPage({ searchParams }: PageProps<"/book">) {
           </p>
           <BookingForm
             destinations={tours.map(({ id, name }) => ({ id, name }))}
+            vehicleCategories={vehicleCategories}
             initialDestination={typeof destination === "string" ? destination : undefined}
           />
         </div>
