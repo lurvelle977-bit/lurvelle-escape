@@ -68,13 +68,23 @@ export const createBookingSchema = z
 
 export type CreateBookingInput = z.output<typeof createBookingSchema>;
 
-export const listBookingsSchema = z.object({
-  q: z.string().trim().max(100).optional(),
-  status: z.enum(BOOKING_STATUSES).optional(),
-  type: z.enum(BOOKING_TYPES).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
-});
+// A blank filter control submits "", which means "no filter"
+const blankToUndefined = (value: unknown) => (value === "" ? undefined : value);
+
+export const listBookingsSchema = z
+  .object({
+    q: z.string().trim().max(100).optional(),
+    status: z.preprocess(blankToUndefined, z.enum(BOOKING_STATUSES).optional()),
+    type: z.preprocess(blankToUndefined, z.enum(BOOKING_TYPES).optional()),
+    category: z.preprocess(blankToUndefined, z.enum(VEHICLE_CATEGORY_KEYS).optional()),
+    assignment: z.preprocess(blankToUndefined, z.enum(["assigned", "unassigned"]).optional()),
+    dates: z.preprocess(blankToUndefined, z.enum(["today", "upcoming", "past", "range"]).optional()),
+    from: z.preprocess(blankToUndefined, isoDate.optional()),
+    to: z.preprocess(blankToUndefined, isoDate.optional()),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .refine((value) => !value.from || !value.to || value.from <= value.to, { message: "Start date must not be after end date", path: ["to"] });
 
 // Fields a customer holding their private link may change while the request is still being reviewed
 export const customerUpdateSchema = z

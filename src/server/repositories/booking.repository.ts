@@ -123,7 +123,18 @@ export async function findByIdempotencyKey(client: Queryable, key: string): Prom
   return rows[0] ? toRecord(rows[0]) : null;
 }
 
-export type ListFilters = { q?: string; status?: BookingStatus; type?: BookingRecord["bookingType"]; page: number; pageSize: number };
+export type ListFilters = {
+  q?: string;
+  status?: BookingStatus;
+  type?: BookingRecord["bookingType"];
+  category?: VehicleCategory;
+  assignment?: "assigned" | "unassigned";
+  dates?: "today" | "upcoming" | "past" | "range";
+  from?: string;
+  to?: string;
+  page: number;
+  pageSize: number;
+};
 
 export async function listBookings(client: Queryable, filters: ListFilters) {
   // Soft-deleted bookings never appear in the list, search results or counts
@@ -131,15 +142,35 @@ export async function listBookings(client: Queryable, filters: ListFilters) {
   const values: unknown[] = [];
   if (filters.status) where.push(`b.status = $${values.push(filters.status)}`);
   if (filters.type) where.push(`b.booking_type = $${values.push(filters.type)}`);
+  if (filters.category) where.push(`b.vehicle_category = $${values.push(filters.category)}`);
+  // The assigned vehicle is the real vehicle_id link, independent of the customer's chosen category
+  if (filters.assignment) where.push(filters.assignment === "assigned" ? "b.vehicle_id IS NOT NULL" : "b.vehicle_id IS NULL");
+  // travel_date is a plain date, compared with the database's CURRENT_DATE so no client timezone is involved
+  if (filters.dates === "today") where.push("b.travel_date = CURRENT_DATE");
+  if (filters.dates === "upcoming") where.push("b.travel_date > CURRENT_DATE");
+  if (filters.dates === "past") where.push("b.travel_date < CURRENT_DATE");
+  if (filters.dates === "range") {
+    if (filters.from) where.push(`b.travel_date >= $${values.push(filters.from)}::date`);
+    if (filters.to) where.push(`b.travel_date <= $${values.push(filters.to)}::date`);
+  }
   if (filters.q) {
-    // Reference, customer name or email; LIKE wildcards in user input are escaped
+    // Reference, customer name / email / phone, destination; LIKE wildcards in user input are escaped
     const pattern = `%${filters.q.replace(/[\\%_]/g, "\\$&")}%`;
     const index = values.push(pattern);
-    where.push(`(b.reference ILIKE $${index} OR c.name ILIKE $${index} OR c.email ILIKE $${index})`);
+    where.push(
+      `(b.reference ILIKE $${index} OR c.name ILIKE $${index} OR c.email ILIKE $${index} OR c.whatsapp ILIKE $${index}
+        OR d.name ILIKE $${index} OR b.custom_destination ILIKE $${index})`,
+    );
   }
-  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const clause = `WHERE ${where.join(" AND ")}`;
+  // Every join is many-to-one, so rows are never duplicated and count(*) matches the page query
   const total = Number(
-    (await client.query<{ count: string }>(`SELECT count(*) FROM bookings b JOIN customers c ON c.id = b.customer_id ${clause}`, values)).rows[0].count,
+    (
+      await client.query<{ count: string }>(
+        `SELECT count(*) FROM bookings b JOIN customers c ON c.id = b.customer_id LEFT JOIN destinations d ON d.id = b.destination_id ${clause}`,
+        values,
+      )
+    ).rows[0].count,
   );
   const limit = values.push(filters.pageSize);
   const offset = values.push((filters.page - 1) * filters.pageSize);

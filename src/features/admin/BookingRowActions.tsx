@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ACTIVE_STATUSES } from "@/server/domain/status";
-import AssignVehicleDrawer from "./AssignVehicleDrawer";
 import Dialog from "./Dialog";
 import { adminButton } from "./ui";
 import { useAdminAction } from "./useAdminAction";
@@ -11,23 +9,17 @@ import { useAdminAction } from "./useAdminAction";
 const linkClass = "cursor-pointer text-[12px] font-semibold text-gold hover:text-gold-light disabled:cursor-not-allowed disabled:text-muted disabled:opacity-60";
 
 // Compact Edit / Assign / Delete controls for one row of the bookings table
-export default function BookingRowActions({ reference, customerName, status }: { reference: string; customerName: string; status: string }) {
-  const [panel, setPanel] = useState<"assign" | "delete" | null>(null);
+export default function BookingRowActions({ reference, customerName }: { reference: string; customerName: string }) {
+  const [panel, setPanel] = useState<"delete" | null>(null);
   const remove = useAdminAction();
-  const canAssign = status !== "PENDING" && (ACTIVE_STATUSES as readonly string[]).includes(status);
   const close = () => setPanel(null);
 
   return (
     <>
       <div className="flex items-center gap-3 whitespace-nowrap">
-        <Link href={`/admin/bookings/${reference}#edit`} className={linkClass}>Review</Link>
-        <button type="button" disabled={!canAssign} title={canAssign ? undefined : "Start the review of an open booking before assigning a vehicle"} onClick={() => setPanel("assign")} className={linkClass}>
-          Assign
-        </button>
+        <Link href={`/admin/bookings/${reference}`} className={linkClass}>Review</Link>
         <button type="button" onClick={() => setPanel("delete")} className="cursor-pointer text-[12px] font-semibold text-[#e8907f] hover:underline">Delete</button>
       </div>
-
-      {panel === "assign" && <AssignVehicleDrawer reference={reference} onClose={close} />}
 
       {panel === "delete" && (
         <Dialog title="Delete booking" onClose={close}>
